@@ -604,7 +604,7 @@ static struct tty_operations serial_ops = {
 	.ioctl = tty0uart_tty_ioctl,
 };
 
-static struct tty_driver *tty0uart_tty_tty_driver;
+static struct tty_driver *tty0uart_tty_driver;
 
 static int tty0uart_tty_init(void)
 {
@@ -625,43 +625,43 @@ static int tty0uart_tty_init(void)
 	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
 #endif
 	/* allocate the tty driver */
-	tty0uart_tty_tty_driver = alloc_tty_driver(2 * pairs);
-	if (!tty0uart_tty_tty_driver)
+	tty0uart_tty_driver = alloc_tty_driver(2 * pairs);
+	if (!tty0uart_tty_driver)
 		return -ENOMEM;
 
 	/* initialize the tty driver */
-	tty0uart_tty_tty_driver->owner = THIS_MODULE;
-	tty0uart_tty_tty_driver->driver_name = "tty0uart_tty";
-	tty0uart_tty_tty_driver->name = "ttyvs";
+	tty0uart_tty_driver->owner = THIS_MODULE;
+	tty0uart_tty_driver->driver_name = "tty0uart_tty";
+	tty0uart_tty_driver->name = "ttyvs";
 	/* no more devfs subsystem */
-	tty0uart_tty_tty_driver->major = TTY0UART_MAJOR;
-	tty0uart_tty_tty_driver->minor_start = TTY0UART_MINOR;
-	tty0uart_tty_tty_driver->type = TTY_DRIVER_TYPE_SERIAL;
-	tty0uart_tty_tty_driver->subtype = SERIAL_TYPE_NORMAL;
-	tty0uart_tty_tty_driver->flags =
+	tty0uart_tty_driver->major = TTY0UART_MAJOR;
+	tty0uart_tty_driver->minor_start = TTY0UART_MINOR;
+	tty0uart_tty_driver->type = TTY_DRIVER_TYPE_SERIAL;
+	tty0uart_tty_driver->subtype = SERIAL_TYPE_NORMAL;
+	tty0uart_tty_driver->flags =
 		TTY_DRIVER_RESET_TERMIOS | TTY_DRIVER_REAL_RAW;
 	/* no more devfs subsystem */
-	tty0uart_tty_tty_driver->init_termios = tty_std_termios;
-	tty0uart_tty_tty_driver->init_termios.c_iflag = 0;
-	tty0uart_tty_tty_driver->init_termios.c_oflag = 0;
-	tty0uart_tty_tty_driver->init_termios.c_cflag = B38400 | CS8 | CREAD;
-	tty0uart_tty_tty_driver->init_termios.c_lflag = 0;
-	tty0uart_tty_tty_driver->init_termios.c_ispeed = 38400;
-	tty0uart_tty_tty_driver->init_termios.c_ospeed = 38400;
+	tty0uart_tty_driver->init_termios = tty_std_termios;
+	tty0uart_tty_driver->init_termios.c_iflag = 0;
+	tty0uart_tty_driver->init_termios.c_oflag = 0;
+	tty0uart_tty_driver->init_termios.c_cflag = B38400 | CS8 | CREAD;
+	tty0uart_tty_driver->init_termios.c_lflag = 0;
+	tty0uart_tty_driver->init_termios.c_ispeed = 38400;
+	tty0uart_tty_driver->init_termios.c_ospeed = 38400;
 
-	tty_set_operations(tty0uart_tty_tty_driver, &serial_ops);
+	tty_set_operations(tty0uart_tty_driver, &serial_ops);
 
 	for (i = 0; i < 2 * pairs; i++) {
 		tty_port_init(&t_port[i]);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
-		tty_port_link_device(&t_port[i], tty0uart_tty_tty_driver, i);
+		tty_port_link_device(&t_port[i], tty0uart_tty_driver, i);
 #endif
 	}
 
-	retval = tty_register_driver(tty0uart_tty_tty_driver);
+	retval = tty_register_driver(tty0uart_tty_driver);
 	if (retval) {
 		printk(KERN_ERR "Failed to register tty0uart_tty tty driver");
-		put_tty_driver(tty0uart_tty_tty_driver);
+		put_tty_driver(tty0uart_tty_driver);
 		return retval;
 	}
 
@@ -681,9 +681,9 @@ static void tty0uart_tty_exit(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 		tty_port_destroy(&t_port[i]);
 #endif
-		tty_unregister_device(tty0uart_tty_tty_driver, i);
+		tty_unregister_device(tty0uart_tty_driver, i);
 	}
-	tty_unregister_driver(tty0uart_tty_tty_driver);
+	tty_unregister_driver(tty0uart_tty_driver);
 
 	/* shut down all of the timers and free the memory */
 	for (i = 0; i < 2 * pairs; ++i) {
