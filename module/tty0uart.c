@@ -855,9 +855,9 @@ static int tty0uart_uart_serial_probe(struct platform_device *pdev)
 
 static int tty0uart_uart_serial_remove(struct platform_device *pdev)
 {
-	struct uart_port *port = platform_get_drvdata(pdev);
+	struct tty0uart_uart_serial *serial = platform_get_drvdata(pdev);
 	platform_set_drvdata(pdev, NULL);
-	uart_remove_one_port(&tty0uart_uart_driver, port);
+	uart_remove_one_port(&tty0uart_uart_driver, &serial->port);
 	return 0;
 }
 
