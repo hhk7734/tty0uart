@@ -702,7 +702,13 @@ static void tty0uart_tty_exit(void)
 	kfree(tty0uart_tty_table);
 }
 
-static struct uart_port u_port[4];
+struct tty0uart_uart_serial {
+	struct uart_port port;
+	int open_count; /* number of times this port has been opened */
+	struct semaphore sem; /* locks this structure */
+};
+
+static struct tty0uart_uart_serial tty0uart_uart_serials[4];
 
 static struct uart_driver tty0uart_uart_driver = {
 	.owner = THIS_MODULE,
@@ -712,11 +718,122 @@ static struct uart_driver tty0uart_uart_driver = {
 	.minor = TTY0UART_MINOR,
 };
 
-static const struct uart_ops tty0uart_uart_ops;
+static inline struct tty0uart_uart_serial *
+to_tty0uart_uart_serial(struct uart_port *port)
+{
+	return container_of(port, struct tty0uart_uart_serial, port);
+}
 
-static void tty0uart_uart_init_port(struct uart_port *port,
+static u_int tty0uart_uart_tx_empty(struct uart_port *port)
+{
+	return TIOCSER_TEMT;
+}
+
+static void tty0uart_uart_set_mctrl(struct uart_port *port, unsigned int mctrl)
+{
+}
+
+static unsigned int tty0uart_uart_get_mctrl(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_stop_tx(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_start_tx(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_stop_rx(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_enable_ms(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_break_ctl(struct uart_port *port, int ctl)
+{
+}
+
+static int tty0uart_uart_startup(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_shutdown(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_flush_buffer(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_set_termios(struct uart_port *port,
+				      struct ktermios *new,
+				      struct ktermios *old)
+{
+}
+
+static void tty0uart_uart_set_ldisc(struct uart_port *port,
+				    struct ktermios *termios)
+{
+}
+
+static void tty0uart_uart_pm(struct uart_port *port, unsigned int state,
+			     unsigned int oldstate)
+{
+}
+
+static const char *tty0uart_uart_type(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_release_port(struct uart_port *port)
+{
+}
+
+static int tty0uart_uart_request_port(struct uart_port *port)
+{
+}
+
+static void tty0uart_uart_config_port(struct uart_port *port, int flags)
+{
+}
+
+static int tty0uart_uart_verify_port(struct uart_port *port,
+				     struct serial_struct *ser)
+{
+}
+
+static const struct uart_ops tty0uart_uart_ops = {
+	.tx_empty = tty0uart_uart_tx_empty,
+	.set_mctrl = tty0uart_uart_set_mctrl,
+	.get_mctrl = tty0uart_uart_get_mctrl,
+	.stop_tx = tty0uart_uart_stop_tx,
+	.start_tx = tty0uart_uart_start_tx,
+	.stop_rx = tty0uart_uart_stop_rx,
+	.enable_ms = tty0uart_uart_enable_ms,
+	.break_ctl = tty0uart_uart_break_ctl,
+	.startup = tty0uart_uart_startup,
+	.shutdown = tty0uart_uart_shutdown,
+	.flush_buffer = tty0uart_uart_flush_buffer,
+	.set_termios = tty0uart_uart_set_termios,
+	.set_ldisc = tty0uart_uart_set_ldisc,
+	.pm = tty0uart_uart_pm,
+	.type = tty0uart_uart_type,
+	.release_port = tty0uart_uart_release_port,
+	.request_port = tty0uart_uart_request_port,
+	.config_port = tty0uart_uart_config_port,
+	.verify_port = tty0uart_uart_verify_port,
+};
+
+static void tty0uart_uart_init_port(struct tty0uart_uart_serial *serial,
 				    struct platform_device *pdev)
 {
+	struct uart_port *port;
+	port = &serial->port;
+
 	port->iotype = UPIO_MEM;
 	port->flags = UPF_BOOT_AUTOCONF;
 	port->ops = &tty0uart_uart_ops;
@@ -727,11 +844,12 @@ static void tty0uart_uart_init_port(struct uart_port *port,
 
 static int tty0uart_uart_serial_probe(struct platform_device *pdev)
 {
-	struct uart_port *port;
-	port = &u_port[pdev->id];
-	tty0uart_uart_init_port(port, pdev);
-	uart_add_one_port(&tty0uart_uart_driver, port);
-	platform_set_drvdata(pdev, port);
+	struct tty0uart_uart_serial *serial;
+	serial = &tty0uart_uart_serials[pdev->id];
+
+	tty0uart_uart_init_port(serial, pdev);
+	uart_add_one_port(&tty0uart_uart_driver, &serial->port);
+	platform_set_drvdata(pdev, serial);
 	return 0;
 }
 
