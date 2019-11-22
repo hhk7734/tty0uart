@@ -39,23 +39,24 @@
 #include <asm/uaccess.h>
 
 #include <linux/platform_device.h>
+#include <linux/serial_core.h>
 
 #define DRIVER_VERSION "v0.1"
 #define DRIVER_AUTHOR "Hyeonki Hong <hhk7734@gmail.com>"
 #define DRIVER_DESC                                                            \
 	"tty0uart, Null-modem emulator connecting virtual tty to virtual UART"
 
-short pairs = 4; //Default number of pairs of devices
+short pairs = 1; //Default number of pairs of devices
 module_param(pairs, short, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 MODULE_PARM_DESC(pairs,
-		 "Number of pairs of devices to be created, maximum of 128");
+		 "Number of pairs of devices to be created, maximum of 4");
 
 #if 0
-#define tty0uart_tty_MAJOR 240 /* experimental range */
-#define tty0uart_tty_MINOR 16
+#define TTY0UART_MAJOR 240 /* experimental range */
+#define TTY0UART_MINOR 16
 #else
-#define tty0uart_tty_MAJOR 0 /* dynamic allocation */
-#define tty0uart_tty_MINOR 0
+#define TTY0UART_MAJOR 0 /* dynamic allocation */
+#define TTY0UART_MINOR 0
 #endif
 
 /* fake UART values */
@@ -633,8 +634,8 @@ static int tty0uart_tty_init(void)
 	tty0uart_tty_tty_driver->driver_name = "tty0uart_tty";
 	tty0uart_tty_tty_driver->name = "ttyvs";
 	/* no more devfs subsystem */
-	tty0uart_tty_tty_driver->major = tty0uart_tty_MAJOR;
-	tty0uart_tty_tty_driver->minor_start = tty0uart_tty_MINOR;
+	tty0uart_tty_tty_driver->major = TTY0UART_MAJOR;
+	tty0uart_tty_tty_driver->minor_start = TTY0UART_MINOR;
 	tty0uart_tty_tty_driver->type = TTY_DRIVER_TYPE_SERIAL;
 	tty0uart_tty_tty_driver->subtype = SERIAL_TYPE_NORMAL;
 	tty0uart_tty_tty_driver->flags =
@@ -701,7 +702,62 @@ static void tty0uart_tty_exit(void)
 	kfree(tty0uart_tty_table);
 }
 
-static struct platform_device tty0uart_serial_device[4];
+static struct uart_port u_port[4];
+
+static struct uart_driver tty0uart_uart_driver = {
+	.owner = THIS_MODULE,
+	.driver_name = "tty0uart_uart",
+	.dev_name = "ttyVS",
+	.major = TTY0UART_MAJOR,
+	.minor = TTY0UART_MINOR,
+};
+
+static const struct uart_ops tty0uart_uart_ops;
+
+static void tty0uart_uart_init_port(struct uart_port *port,
+				    struct platform_device *pdev)
+{
+	port->iotype = UPIO_MEM;
+	port->flags = UPF_BOOT_AUTOCONF;
+	port->ops = &tty0uart_uart_ops;
+	port->fifosize = 1;
+	port->line = pdev->id;
+	port->dev = &pdev->dev;
+}
+
+static int tty0uart_uart_serial_probe(struct platform_device *pdev)
+{
+	struct uart_port *port;
+	port = &u_port[pdev->id];
+	tty0uart_uart_init_port(port, pdev);
+	uart_add_one_port(&tty0uart_uart_driver, port);
+	platform_set_drvdata(pdev, port);
+	return 0;
+}
+
+static int tty0uart_uart_serial_remove(struct platform_device *pdev)
+{
+	struct uart_port *port = platform_get_drvdata(pdev);
+	platform_set_drvdata(pdev, NULL);
+	uart_remove_one_port(&tty0uart_uart_driver, port);
+	return 0;
+}
+
+#define tty0uart_uart_serial_suspend NULL
+#define tty0uart_uart_serial_resume NULL
+
+static struct platform_driver tty0uart_uart_serial_driver = {
+	.probe		= tty0uart_uart_serial_probe,
+	.remove		= tty0uart_uart_serial_remove,
+	.suspend	= tty0uart_uart_serial_suspend,
+	.resume		= tty0uart_uart_serial_resume,
+	.driver		= {
+		.name		= "tty0uart_serial",
+		.owner = THIS_MODULE,
+	},
+};
+
+static struct platform_device tty0uart_uart_serial_device[4];
 
 static int tty0uart_uart_init(void)
 {
@@ -709,17 +765,39 @@ static int tty0uart_uart_init(void)
 	int i;
 
 	for (i = 0; i < pairs; ++i) {
-		tty0uart_serial_device[i].name = "tty0uart_serial";
-		tty0uart_serial_device[i].id = i;
-		ret = platform_device_register(&tty0uart_serial_device[i]);
+		tty0uart_uart_serial_device[i].name = "tty0uart_serial";
+		tty0uart_uart_serial_device[i].id = i;
+		ret = platform_device_register(&tty0uart_uart_serial_device[i]);
 		if (ret) {
 			while (i--) {
 				platform_device_unregister(
-					&tty0uart_serial_device[i]);
+					&tty0uart_uart_serial_device[i]);
 			}
 			printk(KERN_ERR
-			       "Failed to register tty0uart_serial_device\n");
+			       "Failed to register tty0uart_uart_serial_device\n");
 			return ret;
+		}
+	}
+
+	tty0uart_uart_driver.nr = pairs;
+
+	ret = uart_register_driver(&tty0uart_uart_driver);
+	if (ret) {
+		printk(KERN_ERR "Failed to register tty0uart_uart_driver\n");
+		for (i = 0; i < pairs; ++i) {
+			platform_device_unregister(
+				&tty0uart_uart_serial_device[i]);
+		}
+		return ret;
+	}
+
+	ret = platform_driver_register(&tty0uart_uart_serial_driver);
+	if (ret) {
+		printk(KERN_ERR "Failed to register tty0_uart_serial_driver\n");
+		uart_unregister_driver(&tty0uart_uart_driver);
+		for (i = 0; i < pairs; ++i) {
+			platform_device_unregister(
+				&tty0uart_uart_serial_device[i]);
 		}
 	}
 
@@ -730,7 +808,7 @@ static void tty0uart_uart_exit(void)
 {
 	int i;
 	for (i = 0; i < pairs; ++i) {
-		platform_device_unregister(&tty0uart_serial_device[i]);
+		platform_device_unregister(&tty0uart_uart_serial_device[i]);
 	}
 }
 
