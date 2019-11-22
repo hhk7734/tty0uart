@@ -38,6 +38,8 @@
 #endif
 #include <asm/uaccess.h>
 
+#include <linux/platform_device.h>
+
 #define DRIVER_VERSION "v0.1"
 #define DRIVER_AUTHOR "Hyeonki Hong <hhk7734@gmail.com>"
 #define DRIVER_DESC                                                            \
@@ -699,13 +701,52 @@ static void tty0uart_tty_exit(void)
 	kfree(tty0uart_tty_table);
 }
 
+static struct platform_device tty0uart_serial_device[4];
+
+static int tty0uart_uart_init(void)
+{
+	int ret;
+	int i;
+
+	for (i = 0; i < pairs; ++i) {
+		tty0uart_serial_device[i].name = "tty0uart_serial";
+		tty0uart_serial_device[i].id = i;
+		ret = platform_device_register(&tty0uart_serial_device[i]);
+		if (ret) {
+			while (i--) {
+				platform_device_unregister(
+					&tty0uart_serial_device[i]);
+			}
+			printk(KERN_ERR
+			       "Failed to register tty0uart_serial_device\n");
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
+static void tty0uart_uart_exit(void)
+{
+	int i;
+	for (i = 0; i < pairs; ++i) {
+		platform_device_unregister(&tty0uart_serial_device[i]);
+	}
+}
+
 static int __init tty0uart_init(void)
 {
 	int ret;
 
 	ret = tty0uart_tty_init();
 	if (ret) {
-		printk(KERN_ERR "Failed to initialize tty0uart_tty");
+		printk(KERN_ERR "Failed to initialize tty0uart_tty\n");
+		return ret;
+	}
+
+	ret = tty0uart_uart_init();
+	if (ret) {
+		printk(KERN_ERR "Failed to initialize tty0uart_uart\n");
 		return ret;
 	}
 
@@ -715,6 +756,7 @@ static int __init tty0uart_init(void)
 static void __exit tty0uart_exit(void)
 {
 	tty0uart_tty_exit();
+	tty0uart_uart_exit();
 }
 
 module_init(tty0uart_init);
