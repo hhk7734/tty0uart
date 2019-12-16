@@ -44,7 +44,7 @@
 #define DRIVER_VERSION "v0.1"
 #define DRIVER_AUTHOR "Hyeonki Hong <hhk7734@gmail.com>"
 #define DRIVER_DESC                                                            \
-	"tty0uart, Null-modem emulator connecting virtual tty to virtual UART"
+	"tty0uart: Null-modem emulator connecting virtual tty to virtual UART"
 
 short pairs = 1; //Default number of pairs of devices
 module_param(pairs, short, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
@@ -60,6 +60,8 @@ MODULE_PARM_DESC(pairs,
 #endif
 
 #define PORT_TTY0UART 255
+
+#define MAX_PORT_NUM 4
 
 /*
  * fake UART values
@@ -93,6 +95,17 @@ struct tty0uart_tty_serial {
 	struct async_icount icount;
 };
 
+struct tty0uart_uart_serial {
+	struct uart_port port;
+	bool is_open;
+
+	/* for tiocmget and tiocmset functions */
+	int msr; /* MSR shadow */
+	int mcr; /* MCR shadow */
+};
+
+static struct tty0uart_uart_serial tty0uart_uart_serials[MAX_PORT_NUM];
+
 static struct tty0uart_tty_serial **tty0uart_tty_serials; /* initially all NULL */
 
 static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
@@ -102,9 +115,6 @@ static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 	int msr = 0;
 	int mcr = 0;
 
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
 	/* initialize the pointer in case something fails */
 	tty->driver_data = NULL;
 
@@ -126,15 +136,9 @@ static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 	tty0uart_tty_port[index].tty = tty;
 	tty->port = &tty0uart_tty_port[index];
 
-	if ((index % 2) == 0) {
-		if (tty0uart_tty_serials[index + 1] != NULL)
-			if (tty0uart_tty_serials[index + 1]->is_open)
-				mcr = tty0uart_tty_serials[index + 1]->mcr;
-	} else {
-		if (tty0uart_tty_serials[index - 1] != NULL)
-			if (tty0uart_tty_serials[index - 1]->is_open)
-				mcr = tty0uart_tty_serials[index - 1]->mcr;
-	}
+	// if (tty0uart_uart_serials[index] != NULL)
+	if (tty0uart_uart_serials[index].is_open)
+		mcr = tty0uart_uart_serials[index].mcr;
 
 	//null modem connection
 
@@ -161,6 +165,7 @@ static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 	t_serial->is_open = true;
 
 	up(&t_serial->sem);
+
 	return 0;
 }
 
@@ -168,22 +173,9 @@ static void do_close(struct tty0uart_tty_serial *t_serial)
 {
 	unsigned int msr = 0;
 
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
-	if ((t_serial->tty->index % 2) == 0) {
-		if (tty0uart_tty_serials[t_serial->tty->index + 1] != NULL)
-			if (tty0uart_tty_serials[t_serial->tty->index + 1]
-				    ->is_open)
-				tty0uart_tty_serials[t_serial->tty->index + 1]
-					->msr = msr;
-	} else {
-		if (tty0uart_tty_serials[t_serial->tty->index - 1] != NULL)
-			if (tty0uart_tty_serials[t_serial->tty->index - 1]
-				    ->is_open)
-				tty0uart_tty_serials[t_serial->tty->index - 1]
-					->msr = msr;
-	}
+	// if (tty0uart_uart_serials[t_serial->tty->index] != NULL)
+	if (tty0uart_uart_serials[t_serial->tty->index].is_open)
+		tty0uart_uart_serials[t_serial->tty->index].msr = msr;
 
 	down(&t_serial->sem);
 	if (!t_serial->is_open) {
@@ -194,17 +186,11 @@ static void do_close(struct tty0uart_tty_serial *t_serial)
 	t_serial->is_open = false;
 exit:
 	up(&t_serial->sem);
-
-	return;
 }
 
 static void tty0uart_tty_close(struct tty_struct *tty, struct file *file)
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
-
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
 	if (t_serial)
 		do_close(t_serial);
 }
@@ -213,50 +199,32 @@ static int tty0uart_tty_write(struct tty_struct *tty,
 			      const unsigned char *buffer, int count)
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
-	int ret = -EINVAL;
-	struct tty_struct *ttyx = NULL;
+	struct tty0uart_uart_serial *u_serial;
+	struct uart_port *u_port;
+	struct tty_port *u_t_port;
 
-	if (!t_serial)
+	if ((!t_serial) || (!t_serial->is_open))
 		return -ENODEV;
 
-	down(&t_serial->sem);
+	u_serial = &tty0uart_uart_serials[tty->index];
 
-	if (!t_serial->is_open)
-		/* port was not opened */
-		goto exit;
-
-	if ((t_serial->tty->index % 2) == 0) {
-		if (tty0uart_tty_serials[t_serial->tty->index + 1] != NULL)
-			if (tty0uart_tty_serials[t_serial->tty->index + 1]
-				    ->is_open)
-				ttyx = tty0uart_tty_serials[t_serial->tty->index +
-							    1]
-					       ->tty;
-	} else {
-		if (tty0uart_tty_serials[t_serial->tty->index - 1] != NULL)
-			if (tty0uart_tty_serials[t_serial->tty->index - 1]
-				    ->is_open)
-				ttyx = tty0uart_tty_serials[t_serial->tty->index -
-							    1]
-					       ->tty;
+	if ((!u_serial) || (!u_serial->is_open)) {
+		printk(KERN_ERR "/dev/ttyVS%d does not open.\n", tty->index);
+		return -ENODEV;
 	}
 
-	//        tty->low_latency=1;
+	u_port = &u_serial->port;
+	u_t_port = &u_port->state->port;
 
-	if (ttyx != NULL) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
-		tty_insert_flip_string(ttyx->port, buffer, count);
-		tty_flip_buffer_push(ttyx->port);
-#else
-		tty_insert_flip_string(ttyx, buffer, count);
-		tty_flip_buffer_push(ttyx);
-#endif
-		ret = count;
-	}
+	tty_insert_flip_string(u_t_port, buffer, count);
 
-exit:
-	up(&t_serial->sem);
-	return ret;
+	u_port->icount.rx += count;
+
+	spin_lock(&u_port->lock);
+	tty_flip_buffer_push(u_t_port);
+	spin_unlock(&u_port->lock);
+
+	return count;
 }
 
 static int tty0uart_tty_write_room(struct tty_struct *tty)
@@ -269,10 +237,8 @@ static int tty0uart_tty_write_room(struct tty_struct *tty)
 
 	down(&t_serial->sem);
 
-	if (!t_serial->is_open) {
-		/* port was not opened */
+	if (!t_serial->is_open)
 		goto exit;
-	}
 
 	/* calculate how much room is left in the device */
 	room = 255;
@@ -291,17 +257,8 @@ static void tty0uart_tty_set_termios(struct tty_struct *tty,
 	unsigned int cflag;
 	unsigned int iflag;
 
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 	cflag = tty->termios.c_cflag;
 	iflag = tty->termios.c_iflag;
-#else
-	cflag = tty->termios->c_cflag;
-	iflag = tty->termios->c_iflag;
-#endif
 
 	/* check that they really want us to change something */
 	if (old_termios) {
@@ -410,25 +367,9 @@ static int tty0uart_tty_tiocmset(struct tty_struct *tty, unsigned int set,
 	unsigned int mcr = t_serial->mcr;
 	unsigned int msr = 0;
 
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
-
-	if ((t_serial->tty->index % 2) == 0) {
-		if (tty0uart_tty_serials[t_serial->tty->index + 1] != NULL)
-			if (tty0uart_tty_serials[t_serial->tty->index + 1]
-				    ->is_open)
-				msr = tty0uart_tty_serials[t_serial->tty->index +
-							   1]
-					      ->msr;
-	} else {
-		if (tty0uart_tty_serials[t_serial->tty->index - 1] != NULL)
-			if (tty0uart_tty_serials[t_serial->tty->index - 1]
-				    ->is_open)
-				msr = tty0uart_tty_serials[t_serial->tty->index -
-							   1]
-					      ->msr;
-	}
+	// if (tty0uart_uart_serials[t_serial->tty->index] != NULL)
+	if (tty0uart_uart_serials[t_serial->tty->index].is_open)
+		msr = tty0uart_uart_serials[t_serial->tty->index].msr;
 
 	//null modem connection
 
@@ -456,20 +397,10 @@ static int tty0uart_tty_tiocmset(struct tty_struct *tty, unsigned int set,
 
 	/* set the new MCR value in the device */
 	t_serial->mcr = mcr;
+	// if (tty0uart_uart_serials[t_serial->tty->index] != NULL)
+	if (tty0uart_uart_serials[t_serial->tty->index].is_open)
+		tty0uart_uart_serials[t_serial->tty->index].msr = msr;
 
-	if ((t_serial->tty->index % 2) == 0) {
-		if (tty0uart_tty_serials[t_serial->tty->index + 1] != NULL)
-			if (tty0uart_tty_serials[t_serial->tty->index + 1]
-				    ->is_open)
-				tty0uart_tty_serials[t_serial->tty->index + 1]
-					->msr = msr;
-	} else {
-		if (tty0uart_tty_serials[t_serial->tty->index - 1] != NULL)
-			if (tty0uart_tty_serials[t_serial->tty->index - 1]
-				    ->is_open)
-				tty0uart_tty_serials[t_serial->tty->index - 1]
-					->msr = msr;
-	}
 	return 0;
 }
 
@@ -478,9 +409,6 @@ static int tty0uart_tty_ioctl_tiocgserial(struct tty_struct *tty,
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
 
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
 	if (cmd == TIOCGSERIAL) {
 		struct serial_struct tmp;
 
@@ -515,9 +443,6 @@ static int tty0uart_tty_ioctl_tiocmiwait(struct tty_struct *tty,
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
 
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
 	if (cmd == TIOCMIWAIT) {
 		DECLARE_WAITQUEUE(wait, current);
 		struct async_icount cnow;
@@ -555,9 +480,6 @@ static int tty0uart_tty_ioctl_tiocgicount(struct tty_struct *tty,
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
 
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
 	if (cmd == TIOCGICOUNT) {
 		struct async_icount cnow = t_serial->icount;
 		struct serial_icounter_struct icount;
@@ -616,23 +538,22 @@ static int tty0uart_tty_init(void)
 {
 	int ret;
 	int i;
-	if (pairs > 128)
-		pairs = 128;
+
+	if (pairs > MAX_PORT_NUM)
+		pairs = MAX_PORT_NUM;
 	if (pairs < 1)
 		pairs = 1;
-	tty0uart_tty_port =
-		kmalloc(2 * pairs * sizeof(struct tty_port), GFP_KERNEL);
-	tty0uart_tty_serials = kmalloc(
-		2 * pairs * sizeof(struct tty0uart_tty_serial *), GFP_KERNEL);
 
-	for (i = 0; i < 2 * pairs; i++) {
+	tty0uart_tty_port =
+		kmalloc(pairs * sizeof(struct tty_port), GFP_KERNEL);
+	tty0uart_tty_serials = kmalloc(
+		pairs * sizeof(struct tty0uart_tty_serial *), GFP_KERNEL);
+
+	for (i = 0; i < pairs; i++)
 		tty0uart_tty_serials[i] = NULL;
-	}
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
+
 	/* allocate the tty driver */
-	tty0uart_tty_driver = alloc_tty_driver(2 * pairs);
+	tty0uart_tty_driver = alloc_tty_driver(pairs);
 	if (!tty0uart_tty_driver)
 		return -ENOMEM;
 
@@ -658,17 +579,15 @@ static int tty0uart_tty_init(void)
 
 	tty_set_operations(tty0uart_tty_driver, &serial_ops);
 
-	for (i = 0; i < 2 * pairs; i++) {
+	for (i = 0; i < pairs; i++) {
 		tty_port_init(&tty0uart_tty_port[i]);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 		tty_port_link_device(&tty0uart_tty_port[i], tty0uart_tty_driver,
 				     i);
-#endif
 	}
 
 	ret = tty_register_driver(tty0uart_tty_driver);
 	if (ret) {
-		printk(KERN_ERR "Failed to register tty0uart_tty tty driver");
+		printk(KERN_ERR "Failed to register tty0uart_tty_driver.\n");
 		put_tty_driver(tty0uart_tty_driver);
 		return ret;
 	}
@@ -682,19 +601,15 @@ static void tty0uart_tty_exit(void)
 	struct tty0uart_tty_serial *t_serial;
 	int i;
 
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
-#endif
-	for (i = 0; i < 2 * pairs; ++i) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+	for (i = 0; i < pairs; ++i) {
 		tty_port_destroy(&tty0uart_tty_port[i]);
-#endif
 		tty_unregister_device(tty0uart_tty_driver, i);
 	}
+
 	tty_unregister_driver(tty0uart_tty_driver);
 
 	/* shut down all of the timers and free the memory */
-	for (i = 0; i < 2 * pairs; ++i) {
+	for (i = 0; i < pairs; ++i) {
 		t_serial = tty0uart_tty_serials[i];
 		if (t_serial) {
 			/* close the port */
@@ -709,13 +624,6 @@ static void tty0uart_tty_exit(void)
 	kfree(tty0uart_tty_port);
 	kfree(tty0uart_tty_serials);
 }
-
-struct tty0uart_uart_serial {
-	struct uart_port port;
-	bool is_open;
-};
-
-static struct tty0uart_uart_serial tty0uart_uart_serials[4];
 
 static struct uart_driver tty0uart_uart_driver = {
 	.owner = THIS_MODULE,
