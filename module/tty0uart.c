@@ -889,24 +889,31 @@ static struct platform_driver tty0uart_uart_serial_driver = {
 	},
 };
 
-static struct platform_device tty0uart_uart_serial_device[4];
+static struct platform_device **tty0uart_uart_devices;
 
 static int tty0uart_uart_init(void)
 {
 	int ret;
 	int i;
 
+	tty0uart_uart_devices =
+		kmalloc(pairs * sizeof(struct platform_device *), GFP_KERNEL);
+
 	for (i = 0; i < pairs; ++i) {
-		tty0uart_uart_serial_device[i].name = "tty0uart_serial";
-		tty0uart_uart_serial_device[i].id = i;
-		ret = platform_device_register(&tty0uart_uart_serial_device[i]);
+		/* 
+		 * Calling platform_device_unregister()
+		 * will automatically free it by release()
+		 */
+		tty0uart_uart_devices[i] =
+			platform_device_alloc("tty0uart_serial", i);
+		ret = platform_device_add(tty0uart_uart_devices[i]);
 		if (ret) {
 			while (i--) {
 				platform_device_unregister(
-					&tty0uart_uart_serial_device[i]);
+					tty0uart_uart_devices[i]);
 			}
 			printk(KERN_ERR
-			       "Failed to register tty0uart_uart_serial_device\n");
+			       "Failed to register tty0uart_uart_devices\n");
 			return ret;
 		}
 	}
@@ -917,8 +924,7 @@ static int tty0uart_uart_init(void)
 	if (ret) {
 		printk(KERN_ERR "Failed to register tty0uart_uart_driver\n");
 		for (i = 0; i < pairs; ++i) {
-			platform_device_unregister(
-				&tty0uart_uart_serial_device[i]);
+			platform_device_unregister(tty0uart_uart_devices[i]);
 		}
 		return ret;
 	}
@@ -928,8 +934,7 @@ static int tty0uart_uart_init(void)
 		printk(KERN_ERR "Failed to register tty0_uart_serial_driver\n");
 		uart_unregister_driver(&tty0uart_uart_driver);
 		for (i = 0; i < pairs; ++i) {
-			platform_device_unregister(
-				&tty0uart_uart_serial_device[i]);
+			platform_device_unregister(tty0uart_uart_devices[i]);
 		}
 	}
 
@@ -939,9 +944,16 @@ static int tty0uart_uart_init(void)
 static void tty0uart_uart_exit(void)
 {
 	int i;
+
+	platform_driver_unregister(&tty0uart_uart_serial_driver);
+
+	uart_unregister_driver(&tty0uart_uart_driver);
+
 	for (i = 0; i < pairs; ++i) {
-		platform_device_unregister(&tty0uart_uart_serial_device[i]);
+		platform_device_unregister(tty0uart_uart_devices[i]);
 	}
+
+	kfree(tty0uart_uart_devices);
 }
 
 static int __init tty0uart_init(void)
