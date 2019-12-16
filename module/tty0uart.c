@@ -858,13 +858,14 @@ static void tty0uart_uart_init_port(struct tty0uart_uart_serial *serial,
 
 static int tty0uart_uart_serial_probe(struct platform_device *pdev)
 {
-	struct tty0uart_uart_serial *serial;
-	serial = &tty0uart_uart_serials[pdev->id];
+	struct tty0uart_uart_serial *serial = &tty0uart_uart_serials[pdev->id];
+	int ret = -ENODEV;
 
 	tty0uart_uart_init_port(serial, pdev);
-	uart_add_one_port(&tty0uart_uart_driver, &serial->port);
+	ret = uart_add_one_port(&tty0uart_uart_driver, &serial->port);
+
 	platform_set_drvdata(pdev, serial);
-	return 0;
+	return ret;
 }
 
 static int tty0uart_uart_serial_remove(struct platform_device *pdev)
