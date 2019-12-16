@@ -712,8 +712,7 @@ static void tty0uart_tty_exit(void)
 
 struct tty0uart_uart_serial {
 	struct uart_port port;
-	int open_count; /* number of times this port has been opened */
-	struct semaphore sem; /* locks this structure */
+	bool is_open;
 };
 
 static struct tty0uart_uart_serial tty0uart_uart_serials[4];
@@ -767,10 +766,15 @@ static void tty0uart_uart_break_ctl(struct uart_port *port, int ctl)
 
 static int tty0uart_uart_startup(struct uart_port *port)
 {
+	struct tty0uart_uart_serial *serial = to_tty0uart_uart_serial(port);
+	serial->is_open = true;
+	return 0;
 }
 
 static void tty0uart_uart_shutdown(struct uart_port *port)
 {
+	struct tty0uart_uart_serial *serial = to_tty0uart_uart_serial(port);
+	serial->is_open = false;
 }
 
 static void tty0uart_uart_flush_buffer(struct uart_port *port)
