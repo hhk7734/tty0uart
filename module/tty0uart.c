@@ -72,7 +72,7 @@ MODULE_PARM_DESC(pairs,
 #define MSR_DSR 0x40
 #define MSR_RI 0x80
 
-static struct tty_port *t_port;
+static struct tty_port *tty0uart_tty_port;
 
 struct tty0uart_tty_serial {
 	struct tty_struct *tty; /* pointer to the tty for this device */
@@ -89,7 +89,7 @@ struct tty0uart_tty_serial {
 	struct async_icount icount;
 };
 
-static struct tty0uart_tty_serial **tty0uart_tty_table; /* initially all NULL */
+static struct tty0uart_tty_serial **tty0uart_tty_serials; /* initially all NULL */
 
 static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 {
@@ -106,7 +106,7 @@ static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 
 	/* get the serial object associated with this tty pointer */
 	index = tty->index;
-	tty0uart_tty = tty0uart_tty_table[index];
+	tty0uart_tty = tty0uart_tty_serials[index];
 	if (tty0uart_tty == NULL) {
 		/* first time accessing this device, let's create it */
 		tty0uart_tty = kmalloc(sizeof(*tty0uart_tty), GFP_KERNEL);
@@ -116,20 +116,20 @@ static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 		sema_init(&tty0uart_tty->sem, 1);
 		tty0uart_tty->open_count = 0;
 
-		tty0uart_tty_table[index] = tty0uart_tty;
+		tty0uart_tty_serials[index] = tty0uart_tty;
 	}
 
-	t_port[index].tty = tty;
-	tty->port = &t_port[index];
+	tty0uart_tty_port[index].tty = tty;
+	tty->port = &tty0uart_tty_port[index];
 
 	if ((index % 2) == 0) {
-		if (tty0uart_tty_table[index + 1] != NULL)
-			if (tty0uart_tty_table[index + 1]->open_count > 0)
-				mcr = tty0uart_tty_table[index + 1]->mcr;
+		if (tty0uart_tty_serials[index + 1] != NULL)
+			if (tty0uart_tty_serials[index + 1]->open_count > 0)
+				mcr = tty0uart_tty_serials[index + 1]->mcr;
 	} else {
-		if (tty0uart_tty_table[index - 1] != NULL)
-			if (tty0uart_tty_table[index - 1]->open_count > 0)
-				mcr = tty0uart_tty_table[index - 1]->mcr;
+		if (tty0uart_tty_serials[index - 1] != NULL)
+			if (tty0uart_tty_serials[index - 1]->open_count > 0)
+				mcr = tty0uart_tty_serials[index - 1]->mcr;
 	}
 
 	//null modem connection
@@ -168,16 +168,18 @@ static void do_close(struct tty0uart_tty_serial *tty0uart_tty)
 	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
 #endif
 	if ((tty0uart_tty->tty->index % 2) == 0) {
-		if (tty0uart_tty_table[tty0uart_tty->tty->index + 1] != NULL)
-			if (tty0uart_tty_table[tty0uart_tty->tty->index + 1]
+		if (tty0uart_tty_serials[tty0uart_tty->tty->index + 1] != NULL)
+			if (tty0uart_tty_serials[tty0uart_tty->tty->index + 1]
 				    ->open_count > 0)
-				tty0uart_tty_table[tty0uart_tty->tty->index + 1]
+				tty0uart_tty_serials[tty0uart_tty->tty->index +
+						     1]
 					->msr = msr;
 	} else {
-		if (tty0uart_tty_table[tty0uart_tty->tty->index - 1] != NULL)
-			if (tty0uart_tty_table[tty0uart_tty->tty->index - 1]
+		if (tty0uart_tty_serials[tty0uart_tty->tty->index - 1] != NULL)
+			if (tty0uart_tty_serials[tty0uart_tty->tty->index - 1]
 				    ->open_count > 0)
-				tty0uart_tty_table[tty0uart_tty->tty->index - 1]
+				tty0uart_tty_serials[tty0uart_tty->tty->index -
+						     1]
 					->msr = msr;
 	}
 
@@ -222,17 +224,17 @@ static int tty0uart_tty_write(struct tty_struct *tty,
 		goto exit;
 
 	if ((tty0uart_tty->tty->index % 2) == 0) {
-		if (tty0uart_tty_table[tty0uart_tty->tty->index + 1] != NULL)
-			if (tty0uart_tty_table[tty0uart_tty->tty->index + 1]
+		if (tty0uart_tty_serials[tty0uart_tty->tty->index + 1] != NULL)
+			if (tty0uart_tty_serials[tty0uart_tty->tty->index + 1]
 				    ->open_count > 0)
-				ttyx = tty0uart_tty_table
+				ttyx = tty0uart_tty_serials
 					       [tty0uart_tty->tty->index + 1]
 						       ->tty;
 	} else {
-		if (tty0uart_tty_table[tty0uart_tty->tty->index - 1] != NULL)
-			if (tty0uart_tty_table[tty0uart_tty->tty->index - 1]
+		if (tty0uart_tty_serials[tty0uart_tty->tty->index - 1] != NULL)
+			if (tty0uart_tty_serials[tty0uart_tty->tty->index - 1]
 				    ->open_count > 0)
-				ttyx = tty0uart_tty_table
+				ttyx = tty0uart_tty_serials
 					       [tty0uart_tty->tty->index - 1]
 						       ->tty;
 	}
@@ -411,17 +413,17 @@ static int tty0uart_tty_tiocmset(struct tty_struct *tty, unsigned int set,
 #endif
 
 	if ((tty0uart_tty->tty->index % 2) == 0) {
-		if (tty0uart_tty_table[tty0uart_tty->tty->index + 1] != NULL)
-			if (tty0uart_tty_table[tty0uart_tty->tty->index + 1]
+		if (tty0uart_tty_serials[tty0uart_tty->tty->index + 1] != NULL)
+			if (tty0uart_tty_serials[tty0uart_tty->tty->index + 1]
 				    ->open_count > 0)
-				msr = tty0uart_tty_table
+				msr = tty0uart_tty_serials
 					      [tty0uart_tty->tty->index + 1]
 						      ->msr;
 	} else {
-		if (tty0uart_tty_table[tty0uart_tty->tty->index - 1] != NULL)
-			if (tty0uart_tty_table[tty0uart_tty->tty->index - 1]
+		if (tty0uart_tty_serials[tty0uart_tty->tty->index - 1] != NULL)
+			if (tty0uart_tty_serials[tty0uart_tty->tty->index - 1]
 				    ->open_count > 0)
-				msr = tty0uart_tty_table
+				msr = tty0uart_tty_serials
 					      [tty0uart_tty->tty->index - 1]
 						      ->msr;
 	}
@@ -454,16 +456,18 @@ static int tty0uart_tty_tiocmset(struct tty_struct *tty, unsigned int set,
 	tty0uart_tty->mcr = mcr;
 
 	if ((tty0uart_tty->tty->index % 2) == 0) {
-		if (tty0uart_tty_table[tty0uart_tty->tty->index + 1] != NULL)
-			if (tty0uart_tty_table[tty0uart_tty->tty->index + 1]
+		if (tty0uart_tty_serials[tty0uart_tty->tty->index + 1] != NULL)
+			if (tty0uart_tty_serials[tty0uart_tty->tty->index + 1]
 				    ->open_count > 0)
-				tty0uart_tty_table[tty0uart_tty->tty->index + 1]
+				tty0uart_tty_serials[tty0uart_tty->tty->index +
+						     1]
 					->msr = msr;
 	} else {
-		if (tty0uart_tty_table[tty0uart_tty->tty->index - 1] != NULL)
-			if (tty0uart_tty_table[tty0uart_tty->tty->index - 1]
+		if (tty0uart_tty_serials[tty0uart_tty->tty->index - 1] != NULL)
+			if (tty0uart_tty_serials[tty0uart_tty->tty->index - 1]
 				    ->open_count > 0)
-				tty0uart_tty_table[tty0uart_tty->tty->index - 1]
+				tty0uart_tty_serials[tty0uart_tty->tty->index -
+						     1]
 					->msr = msr;
 	}
 	return 0;
@@ -616,12 +620,13 @@ static int tty0uart_tty_init(void)
 		pairs = 128;
 	if (pairs < 1)
 		pairs = 1;
-	t_port = kmalloc(2 * pairs * sizeof(struct tty_port), GFP_KERNEL);
-	tty0uart_tty_table = kmalloc(
+	tty0uart_tty_port =
+		kmalloc(2 * pairs * sizeof(struct tty_port), GFP_KERNEL);
+	tty0uart_tty_serials = kmalloc(
 		2 * pairs * sizeof(struct tty0uart_tty_serial *), GFP_KERNEL);
 
 	for (i = 0; i < 2 * pairs; i++) {
-		tty0uart_tty_table[i] = NULL;
+		tty0uart_tty_serials[i] = NULL;
 	}
 #ifdef SCULL_DEBUG
 	printk(KERN_DEBUG "%s - \n", __FUNCTION__);
@@ -654,9 +659,10 @@ static int tty0uart_tty_init(void)
 	tty_set_operations(tty0uart_tty_driver, &serial_ops);
 
 	for (i = 0; i < 2 * pairs; i++) {
-		tty_port_init(&t_port[i]);
+		tty_port_init(&tty0uart_tty_port[i]);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
-		tty_port_link_device(&t_port[i], tty0uart_tty_driver, i);
+		tty_port_link_device(&tty0uart_tty_port[i], tty0uart_tty_driver,
+				     i);
 #endif
 	}
 
@@ -681,7 +687,7 @@ static void tty0uart_tty_exit(void)
 #endif
 	for (i = 0; i < 2 * pairs; ++i) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
-		tty_port_destroy(&t_port[i]);
+		tty_port_destroy(&tty0uart_tty_port[i]);
 #endif
 		tty_unregister_device(tty0uart_tty_driver, i);
 	}
@@ -689,7 +695,7 @@ static void tty0uart_tty_exit(void)
 
 	/* shut down all of the timers and free the memory */
 	for (i = 0; i < 2 * pairs; ++i) {
-		tty0uart_tty = tty0uart_tty_table[i];
+		tty0uart_tty = tty0uart_tty_serials[i];
 		if (tty0uart_tty) {
 			/* close the port */
 			while (tty0uart_tty->open_count)
@@ -697,11 +703,11 @@ static void tty0uart_tty_exit(void)
 
 			/* shut down our timer and free the memory */
 			kfree(tty0uart_tty);
-			tty0uart_tty_table[i] = NULL;
+			tty0uart_tty_serials[i] = NULL;
 		}
 	}
-	kfree(t_port);
-	kfree(tty0uart_tty_table);
+	kfree(tty0uart_tty_port);
+	kfree(tty0uart_tty_serials);
 }
 
 struct tty0uart_uart_serial {
