@@ -115,6 +115,8 @@ static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 	int msr = 0;
 	int mcr = 0;
 
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	/* initialize the pointer in case something fails */
 	tty->driver_data = NULL;
 
@@ -173,6 +175,8 @@ static void do_close(struct tty0uart_tty_serial *t_serial)
 {
 	unsigned int msr = 0;
 
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	// if (tty0uart_uart_serials[t_serial->tty->index] != NULL)
 	if (tty0uart_uart_serials[t_serial->tty->index].is_open)
 		tty0uart_uart_serials[t_serial->tty->index].msr = msr;
@@ -191,6 +195,9 @@ exit:
 static void tty0uart_tty_close(struct tty_struct *tty, struct file *file)
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	if (t_serial)
 		do_close(t_serial);
 }
@@ -202,6 +209,8 @@ static int tty0uart_tty_write(struct tty_struct *tty,
 	struct tty0uart_uart_serial *u_serial;
 	struct uart_port *u_port;
 	struct tty_port *u_t_port;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	if ((!t_serial) || (!t_serial->is_open))
 		return -ENODEV;
@@ -232,6 +241,8 @@ static int tty0uart_tty_write_room(struct tty_struct *tty)
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
 	int room = -EINVAL;
 
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	if (!t_serial)
 		return -ENODEV;
 
@@ -256,6 +267,8 @@ static void tty0uart_tty_set_termios(struct tty_struct *tty,
 {
 	unsigned int cflag;
 	unsigned int iflag;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	cflag = tty->termios.c_cflag;
 	iflag = tty->termios.c_iflag;
@@ -343,10 +356,11 @@ static void tty0uart_tty_set_termios(struct tty_struct *tty,
 static int tty0uart_tty_tiocmget(struct tty_struct *tty)
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
-
 	unsigned int result = 0;
 	unsigned int msr = t_serial->msr;
 	unsigned int mcr = t_serial->mcr;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	result = ((mcr & MCR_DTR) ? TIOCM_DTR : 0) | /* DTR is set */
 		 ((mcr & MCR_RTS) ? TIOCM_RTS : 0) | /* RTS is set */
@@ -366,6 +380,8 @@ static int tty0uart_tty_tiocmset(struct tty_struct *tty, unsigned int set,
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
 	unsigned int mcr = t_serial->mcr;
 	unsigned int msr = 0;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	// if (tty0uart_uart_serials[t_serial->tty->index] != NULL)
 	if (tty0uart_uart_serials[t_serial->tty->index].is_open)
@@ -409,6 +425,8 @@ static int tty0uart_tty_ioctl_tiocgserial(struct tty_struct *tty,
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
 
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	if (cmd == TIOCGSERIAL) {
 		struct serial_struct tmp;
 
@@ -442,6 +460,8 @@ static int tty0uart_tty_ioctl_tiocmiwait(struct tty_struct *tty,
 					 unsigned int cmd, unsigned long arg)
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	if (cmd == TIOCMIWAIT) {
 		DECLARE_WAITQUEUE(wait, current);
@@ -480,6 +500,8 @@ static int tty0uart_tty_ioctl_tiocgicount(struct tty_struct *tty,
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
 
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	if (cmd == TIOCGICOUNT) {
 		struct async_icount cnow = t_serial->icount;
 		struct serial_icounter_struct icount;
@@ -506,9 +528,8 @@ static int tty0uart_tty_ioctl_tiocgicount(struct tty_struct *tty,
 static int tty0uart_tty_ioctl(struct tty_struct *tty, unsigned int cmd,
 			      unsigned long arg)
 {
-#ifdef SCULL_DEBUG
-	printk(KERN_DEBUG "%s - %04X \n", __FUNCTION__, cmd);
-#endif
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	switch (cmd) {
 	case TIOCGSERIAL:
 		return tty0uart_tty_ioctl_tiocgserial(tty, cmd, arg);
@@ -538,6 +559,8 @@ static int tty0uart_tty_init(void)
 {
 	int ret;
 	int i;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	if (pairs > MAX_PORT_NUM)
 		pairs = MAX_PORT_NUM;
@@ -601,6 +624,8 @@ static void tty0uart_tty_exit(void)
 	struct tty0uart_tty_serial *t_serial;
 	int i;
 
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	for (i = 0; i < pairs; ++i) {
 		tty_port_destroy(&tty0uart_tty_port[i]);
 		tty_unregister_device(tty0uart_tty_driver, i);
@@ -636,45 +661,59 @@ static struct uart_driver tty0uart_uart_driver = {
 static inline struct tty0uart_uart_serial *
 to_tty0uart_uart_serial(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	return container_of(port, struct tty0uart_uart_serial, port);
 }
 
 static u_int tty0uart_uart_tx_empty(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	return TIOCSER_TEMT;
 }
 
 static void tty0uart_uart_set_mctrl(struct uart_port *port, unsigned int mctrl)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static unsigned int tty0uart_uart_get_mctrl(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static void tty0uart_uart_stop_tx(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static void tty0uart_uart_start_tx(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static void tty0uart_uart_stop_rx(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static void tty0uart_uart_enable_ms(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static void tty0uart_uart_break_ctl(struct uart_port *port, int ctl)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static int tty0uart_uart_startup(struct uart_port *port)
 {
 	struct tty0uart_uart_serial *serial = to_tty0uart_uart_serial(port);
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	serial->is_open = true;
 	return 0;
 }
@@ -682,45 +721,59 @@ static int tty0uart_uart_startup(struct uart_port *port)
 static void tty0uart_uart_shutdown(struct uart_port *port)
 {
 	struct tty0uart_uart_serial *serial = to_tty0uart_uart_serial(port);
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	serial->is_open = false;
 }
 
 static void tty0uart_uart_flush_buffer(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static void tty0uart_uart_set_termios(struct uart_port *port,
 				      struct ktermios *new,
 				      struct ktermios *old)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static void tty0uart_uart_set_ldisc(struct uart_port *port,
 				    struct ktermios *termios)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static void tty0uart_uart_pm(struct uart_port *port, unsigned int state,
 			     unsigned int oldstate)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static const char *tty0uart_uart_type(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	return (port->type == PORT_TTY0UART) ? "tty0uart_uart" : NULL;
 }
 
 static void tty0uart_uart_release_port(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static int tty0uart_uart_request_port(struct uart_port *port)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	return 0;
 }
 
 static void tty0uart_uart_config_port(struct uart_port *port, int flags)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	if (flags & UART_CONFIG_TYPE) {
 		port->type = PORT_TTY0UART;
 		tty0uart_uart_request_port(port);
@@ -731,6 +784,9 @@ static int tty0uart_uart_verify_port(struct uart_port *port,
 				     struct serial_struct *ser)
 {
 	int ret = 0;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	if (port->type != PORT_TTY0UART)
 		ret = -EINVAL;
 	return ret;
@@ -761,8 +817,9 @@ static const struct uart_ops tty0uart_uart_ops = {
 static void tty0uart_uart_init_port(struct tty0uart_uart_serial *serial,
 				    struct platform_device *pdev)
 {
-	struct uart_port *port;
-	port = &serial->port;
+	struct uart_port *port = &serial->port;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	port->iotype = UPIO_MEM;
 	port->flags = UPF_BOOT_AUTOCONF;
@@ -778,6 +835,8 @@ static int tty0uart_uart_serial_probe(struct platform_device *pdev)
 	struct tty0uart_uart_serial *serial = &tty0uart_uart_serials[pdev->id];
 	int ret = -ENODEV;
 
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	tty0uart_uart_init_port(serial, pdev);
 	ret = uart_add_one_port(&tty0uart_uart_driver, &serial->port);
 
@@ -788,6 +847,9 @@ static int tty0uart_uart_serial_probe(struct platform_device *pdev)
 static int tty0uart_uart_serial_remove(struct platform_device *pdev)
 {
 	struct tty0uart_uart_serial *serial = platform_get_drvdata(pdev);
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	platform_set_drvdata(pdev, NULL);
 	uart_remove_one_port(&tty0uart_uart_driver, &serial->port);
 	return 0;
@@ -813,6 +875,8 @@ static int tty0uart_uart_init(void)
 {
 	int ret;
 	int i;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	tty0uart_uart_devices =
 		kmalloc(pairs * sizeof(struct platform_device *), GFP_KERNEL);
@@ -863,6 +927,8 @@ static void tty0uart_uart_exit(void)
 {
 	int i;
 
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	platform_driver_unregister(&tty0uart_uart_serial_driver);
 
 	uart_unregister_driver(&tty0uart_uart_driver);
@@ -877,6 +943,8 @@ static void tty0uart_uart_exit(void)
 static int __init tty0uart_init(void)
 {
 	int ret;
+
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	ret = tty0uart_tty_init();
 	if (ret) {
@@ -895,6 +963,8 @@ static int __init tty0uart_init(void)
 
 static void __exit tty0uart_exit(void)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
 	tty0uart_tty_exit();
 	tty0uart_uart_exit();
 }
