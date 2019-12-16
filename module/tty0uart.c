@@ -808,15 +808,24 @@ static void tty0uart_uart_release_port(struct uart_port *port)
 
 static int tty0uart_uart_request_port(struct uart_port *port)
 {
+	return 0;
 }
 
 static void tty0uart_uart_config_port(struct uart_port *port, int flags)
 {
+	if (flags & UART_CONFIG_TYPE) {
+		port->type = PORT_TTY0UART;
+		tty0uart_uart_request_port(port);
+	}
 }
 
 static int tty0uart_uart_verify_port(struct uart_port *port,
 				     struct serial_struct *ser)
 {
+	int ret = 0;
+	if (port->type != PORT_TTY0UART)
+		ret = -EINVAL;
+	return ret;
 }
 
 static const struct uart_ops tty0uart_uart_ops = {
