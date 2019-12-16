@@ -59,6 +59,8 @@ MODULE_PARM_DESC(pairs,
 #define TTY0UART_MINOR 0
 #endif
 
+#define PORT_TTY0UART 255
+
 /* fake UART values */
 //out
 #define MCR_DTR 0x01
@@ -787,6 +789,7 @@ static void tty0uart_uart_pm(struct uart_port *port, unsigned int state,
 
 static const char *tty0uart_uart_type(struct uart_port *port)
 {
+	return (port->type == PORT_TTY0UART) ? "tty0uart_uart" : NULL;
 }
 
 static void tty0uart_uart_release_port(struct uart_port *port)
@@ -840,6 +843,7 @@ static void tty0uart_uart_init_port(struct tty0uart_uart_serial *serial,
 	port->fifosize = 1;
 	port->line = pdev->id;
 	port->dev = &pdev->dev;
+	port->type = PORT_TTY0UART;
 }
 
 static int tty0uart_uart_serial_probe(struct platform_device *pdev)
