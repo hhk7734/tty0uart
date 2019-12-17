@@ -68,15 +68,22 @@ MODULE_PARM_DESC(pairs,
  * MCR - Modem Control Register
  * MSR - Modem Status Register
  */
-//out
-#define MCR_DTR 0x01
-#define MCR_RTS 0x02
-#define MCR_LOOP 0x04
-//in
-#define MSR_CTS 0x10
-#define MSR_CD 0x20
-#define MSR_DSR 0x40
-#define MSR_RI 0x80
+
+// /* modem lines */
+// #define TIOCM_LE 0x001
+// #define TIOCM_DTR 0x002
+// #define TIOCM_RTS 0x004
+// #define TIOCM_ST 0x008
+// #define TIOCM_SR 0x010
+// #define TIOCM_CTS 0x020
+// #define TIOCM_CAR 0x040
+// #define TIOCM_RNG 0x080
+// #define TIOCM_DSR 0x100
+// #define TIOCM_CD TIOCM_CAR
+// #define TIOCM_RI TIOCM_RNG
+// #define TIOCM_OUT1 0x2000
+// #define TIOCM_OUT2 0x4000
+// #define TIOCM_LOOP 0x8000
 
 static struct tty_port *tty0uart_tty_port;
 
@@ -86,8 +93,8 @@ struct tty0uart_tty_serial {
 	struct semaphore sem; /* locks this structure */
 
 	/* for tiocmget and tiocmset functions */
-	int msr; /* MSR shadow */
-	int mcr; /* MCR shadow */
+	unsigned int msr; /* MSR shadow */
+	unsigned int mcr; /* MCR shadow */
 
 	/* for ioctl fun */
 	struct serial_struct serial;
@@ -95,25 +102,25 @@ struct tty0uart_tty_serial {
 	struct async_icount icount;
 };
 
+static struct tty0uart_tty_serial **tty0uart_tty_serials; /* initially all NULL */
+
 struct tty0uart_uart_serial {
 	struct uart_port port;
 	bool is_open;
 
 	/* for tiocmget and tiocmset functions */
-	int msr; /* MSR shadow */
-	int mcr; /* MCR shadow */
+	unsigned int msr; /* MSR shadow */
+	unsigned int mcr; /* MCR shadow */
 };
 
 static struct tty0uart_uart_serial tty0uart_uart_serials[MAX_PORT_NUM];
-
-static struct tty0uart_tty_serial **tty0uart_tty_serials; /* initially all NULL */
 
 static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 {
 	struct tty0uart_tty_serial *t_serial;
 	int index;
-	int msr = 0;
-	int mcr = 0;
+	unsigned int tty_msr = 0;
+	unsigned int uart_mcr = 0;
 
 	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
@@ -140,20 +147,19 @@ static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 
 	// if (tty0uart_uart_serials[index] != NULL)
 	if (tty0uart_uart_serials[index].is_open)
-		mcr = tty0uart_uart_serials[index].mcr;
+		uart_mcr = tty0uart_uart_serials[index].mcr;
 
 	//null modem connection
-
-	if ((mcr & MCR_RTS) == MCR_RTS) {
-		msr |= MSR_CTS;
+	if ((uart_mcr & TIOCM_RTS) == TIOCM_RTS) {
+		tty_msr |= TIOCM_CTS;
 	}
 
-	if ((mcr & MCR_DTR) == MCR_DTR) {
-		msr |= MSR_DSR;
-		msr |= MSR_CD;
+	if ((uart_mcr & TIOCM_DTR) == TIOCM_DTR) {
+		tty_msr |= TIOCM_DSR;
+		tty_msr |= TIOCM_CD;
 	}
 
-	t_serial->msr = msr;
+	t_serial->msr = tty_msr;
 	t_serial->mcr = 0;
 
 	/* register the tty driver */
@@ -173,13 +179,11 @@ static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 
 static void do_close(struct tty0uart_tty_serial *t_serial)
 {
-	unsigned int msr = 0;
-
 	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	// if (tty0uart_uart_serials[t_serial->tty->index] != NULL)
 	if (tty0uart_uart_serials[t_serial->tty->index].is_open)
-		tty0uart_uart_serials[t_serial->tty->index].msr = msr;
+		tty0uart_uart_serials[t_serial->tty->index].msr = 0;
 
 	down(&t_serial->sem);
 	if (!t_serial->is_open) {
@@ -362,13 +366,14 @@ static int tty0uart_tty_tiocmget(struct tty_struct *tty)
 
 	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
-	result = ((mcr & MCR_DTR) ? TIOCM_DTR : 0) | /* DTR is set */
-		 ((mcr & MCR_RTS) ? TIOCM_RTS : 0) | /* RTS is set */
-		 ((mcr & MCR_LOOP) ? TIOCM_LOOP : 0) | /* LOOP is set */
-		 ((msr & MSR_CTS) ? TIOCM_CTS : 0) | /* CTS is set */
-		 ((msr & MSR_CD) ? TIOCM_CAR : 0) | /* Carrier detect is set */
-		 ((msr & MSR_RI) ? TIOCM_RI : 0) | /* Ring Indicator is set */
-		 ((msr & MSR_DSR) ? TIOCM_DSR : 0); /* DSR is set */
+	result =
+		((mcr & TIOCM_DTR) ? TIOCM_DTR : 0) | /* DTR is set */
+		((mcr & TIOCM_RTS) ? TIOCM_RTS : 0) | /* RTS is set */
+		((mcr & TIOCM_LOOP) ? TIOCM_LOOP : 0) | /* LOOP is set */
+		((msr & TIOCM_CTS) ? TIOCM_CTS : 0) | /* CTS is set */
+		((msr & TIOCM_CD) ? TIOCM_CAR : 0) | /* Carrier detect is set */
+		((msr & TIOCM_RI) ? TIOCM_RI : 0) | /* Ring Indicator is set */
+		((msr & TIOCM_DSR) ? TIOCM_DSR : 0); /* DSR is set */
 
 	return result;
 }
@@ -378,44 +383,45 @@ static int tty0uart_tty_tiocmset(struct tty_struct *tty, unsigned int set,
 				 unsigned int clear)
 {
 	struct tty0uart_tty_serial *t_serial = tty->driver_data;
-	unsigned int mcr = t_serial->mcr;
-	unsigned int msr = 0;
+	unsigned int tty_mcr = t_serial->mcr;
+	unsigned int uart_msr = 0;
 
 	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
 	// if (tty0uart_uart_serials[t_serial->tty->index] != NULL)
 	if (tty0uart_uart_serials[t_serial->tty->index].is_open)
-		msr = tty0uart_uart_serials[t_serial->tty->index].msr;
+		uart_msr = tty0uart_uart_serials[t_serial->tty->index].msr;
 
 	//null modem connection
 
 	if (set & TIOCM_RTS) {
-		mcr |= MCR_RTS;
-		msr |= MSR_CTS;
+		tty_mcr |= TIOCM_RTS;
+		uart_msr |= TIOCM_CTS;
 	}
 
 	if (set & TIOCM_DTR) {
-		mcr |= MCR_DTR;
-		msr |= MSR_DSR;
-		msr |= MSR_CD;
+		tty_mcr |= TIOCM_DTR;
+		uart_msr |= TIOCM_DSR;
+		uart_msr |= TIOCM_CD;
 	}
 
 	if (clear & TIOCM_RTS) {
-		mcr &= ~MCR_RTS;
-		msr &= ~MSR_CTS;
+		tty_mcr &= ~TIOCM_RTS;
+		uart_msr &= ~TIOCM_CTS;
 	}
 
 	if (clear & TIOCM_DTR) {
-		mcr &= ~MCR_DTR;
-		msr &= ~MSR_DSR;
-		msr &= ~MSR_CD;
+		tty_mcr &= ~TIOCM_DTR;
+		uart_msr &= ~TIOCM_DSR;
+		uart_msr &= ~TIOCM_CD;
 	}
 
 	/* set the new MCR value in the device */
-	t_serial->mcr = mcr;
+	t_serial->mcr = tty_mcr;
+
 	// if (tty0uart_uart_serials[t_serial->tty->index] != NULL)
 	if (tty0uart_uart_serials[t_serial->tty->index].is_open)
-		tty0uart_uart_serials[t_serial->tty->index].msr = msr;
+		tty0uart_uart_serials[t_serial->tty->index].msr = uart_msr;
 
 	return 0;
 }
@@ -675,12 +681,63 @@ static u_int tty0uart_uart_tx_empty(struct uart_port *port)
 
 static void tty0uart_uart_set_mctrl(struct uart_port *port, unsigned int mctrl)
 {
+	struct tty0uart_uart_serial *u_serial = to_tty0uart_uart_serial(port);
+	unsigned int uart_mcr = u_serial->mcr;
+	unsigned int tty_msr = 0;
+
 	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
+	if (tty0uart_tty_serials[port->line] != NULL)
+		if (tty0uart_tty_serials[port->line]->is_open)
+			tty_msr = tty0uart_tty_serials[port->line]->msr;
+
+	//null modem connection
+
+	if (mctrl & TIOCM_RTS) {
+		uart_mcr |= TIOCM_RTS;
+		tty_msr |= TIOCM_CTS;
+	} else {
+		uart_mcr &= ~TIOCM_RTS;
+		tty_msr &= ~TIOCM_CTS;
+	}
+
+	if (mctrl & TIOCM_DTR) {
+		uart_mcr |= TIOCM_DTR;
+		tty_msr |= TIOCM_DSR;
+		tty_msr |= TIOCM_CD;
+	} else {
+		uart_mcr &= ~TIOCM_DTR;
+		tty_msr &= ~TIOCM_DSR;
+		tty_msr &= ~TIOCM_CD;
+	}
+
+	/* set the new MCR value in the device */
+	u_serial->mcr = uart_mcr;
+
+	if (tty0uart_tty_serials[port->line] != NULL)
+		if (tty0uart_tty_serials[port->line]->is_open)
+			tty0uart_tty_serials[port->line]->msr = tty_msr;
 }
 
 static unsigned int tty0uart_uart_get_mctrl(struct uart_port *port)
 {
+	struct tty0uart_uart_serial *u_serial = to_tty0uart_uart_serial(port);
+	unsigned int result = 0;
+	unsigned int msr = u_serial->msr;
+	unsigned int mcr = u_serial->mcr;
+
 	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
+	result =
+		((mcr & TIOCM_DTR) ? TIOCM_DTR : 0) | /* DTR is set */
+		((mcr & TIOCM_RTS) ? TIOCM_RTS : 0) | /* RTS is set */
+		((mcr & TIOCM_LOOP) ? TIOCM_LOOP : 0) | /* LOOP is set */
+		((msr & TIOCM_CTS) ? TIOCM_CTS : 0) | /* CTS is set */
+		((msr & TIOCM_CD) ? TIOCM_CAR : 0) | /* Carrier detect is set */
+		((msr & TIOCM_RI) ? TIOCM_RI : 0) | /* Ring Indicator is set */
+		((msr & TIOCM_DSR) ? TIOCM_DSR : 0); /* DSR is set */
+
+	return result;
 }
 
 static void tty0uart_uart_stop_tx(struct uart_port *port)
@@ -710,21 +767,45 @@ static void tty0uart_uart_break_ctl(struct uart_port *port, int ctl)
 
 static int tty0uart_uart_startup(struct uart_port *port)
 {
-	struct tty0uart_uart_serial *serial = to_tty0uart_uart_serial(port);
+	struct tty0uart_uart_serial *u_serial = to_tty0uart_uart_serial(port);
+	unsigned int uart_msr = 0;
+	unsigned int tty_mcr = 0;
 
 	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
-	serial->is_open = true;
+	u_serial->is_open = true;
+
+	if (tty0uart_tty_serials[port->line] != NULL)
+		if (tty0uart_tty_serials[port->line]->is_open)
+			tty_mcr = tty0uart_tty_serials[port->line]->mcr;
+
+	//null modem connection
+	if ((tty_mcr & TIOCM_RTS) == TIOCM_RTS) {
+		uart_msr |= TIOCM_CTS;
+	}
+
+	if ((tty_mcr & TIOCM_DTR) == TIOCM_DTR) {
+		uart_msr |= TIOCM_DSR;
+		uart_msr |= TIOCM_CD;
+	}
+
+	u_serial->msr = uart_msr;
+	u_serial->mcr = 0;
+
 	return 0;
 }
 
 static void tty0uart_uart_shutdown(struct uart_port *port)
 {
-	struct tty0uart_uart_serial *serial = to_tty0uart_uart_serial(port);
+	struct tty0uart_uart_serial *u_serial = to_tty0uart_uart_serial(port);
 
 	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
-	serial->is_open = false;
+	if (tty0uart_tty_serials[port->line] != NULL)
+		if (tty0uart_tty_serials[port->line]->is_open)
+			tty0uart_tty_serials[port->line]->msr = 0;
+
+	u_serial->is_open = false;
 }
 
 static void tty0uart_uart_flush_buffer(struct uart_port *port)
@@ -789,6 +870,7 @@ static int tty0uart_uart_verify_port(struct uart_port *port,
 
 	if (port->type != PORT_TTY0UART)
 		ret = -EINVAL;
+
 	return ret;
 }
 
