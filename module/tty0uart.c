@@ -130,7 +130,8 @@ static int tty0uart_tty_open(struct tty_struct *tty, struct file *file)
 	/* get the serial object associated with this tty pointer */
 	index = tty->index;
 	t_serial = tty0uart_tty_serials[index];
-	if (t_serial == NULL) {
+
+	if (!t_serial) {
 		/* first time accessing this device, let's create it */
 		t_serial = kmalloc(sizeof(*t_serial), GFP_KERNEL);
 		if (!t_serial)
@@ -233,9 +234,9 @@ static int tty0uart_tty_write(struct tty_struct *tty,
 
 	u_port->icount.rx += count;
 
-	spin_lock(&u_port->lock);
+	// spin_unlock(&u_port->lock);
 	tty_flip_buffer_push(u_t_port);
-	spin_unlock(&u_port->lock);
+	// spin_lock(&u_port->lock);
 
 	return count;
 }
@@ -393,7 +394,6 @@ static int tty0uart_tty_tiocmset(struct tty_struct *tty, unsigned int set,
 		uart_msr = tty0uart_uart_serials[t_serial->tty->index].msr;
 
 	//null modem connection
-
 	if (set & TIOCM_RTS) {
 		tty_mcr |= TIOCM_RTS;
 		uart_msr |= TIOCM_CTS;
@@ -692,7 +692,6 @@ static void tty0uart_uart_set_mctrl(struct uart_port *port, unsigned int mctrl)
 			tty_msr = tty0uart_tty_serials[port->line]->msr;
 
 	//null modem connection
-
 	if (mctrl & TIOCM_RTS) {
 		uart_mcr |= TIOCM_RTS;
 		tty_msr |= TIOCM_CTS;
@@ -747,7 +746,51 @@ static void tty0uart_uart_stop_tx(struct uart_port *port)
 
 static void tty0uart_uart_start_tx(struct uart_port *port)
 {
+	struct circ_buf *xmit = &port->state->xmit;
+	struct tty0uart_tty_serial *t_serial = tty0uart_tty_serials[port->line];
+	struct tty_port *t_port;
+	size_t count;
+
 	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+
+	if ((!t_serial) || (!t_serial->is_open)) {
+		printk(KERN_ERR "/dev/ttyvs%d does not open.\n", port->line);
+		xmit->tail = xmit->head;
+		return;
+	}
+
+	if (uart_circ_empty(xmit))
+		return;
+
+	down(&t_serial->sem);
+
+	t_port = t_serial->tty->port;
+
+	for (;;) {
+		if (xmit->head < xmit->tail) {
+			count = UART_XMIT_SIZE - xmit->tail;
+			tty_insert_flip_string(t_port, xmit->buf + xmit->tail,
+					       count);
+			xmit->tail = 0;
+			port->icount.tx += count;
+		}
+
+		if (xmit->tail < xmit->head) {
+			count = xmit->head - xmit->tail;
+			tty_insert_flip_string(t_port, xmit->buf + xmit->tail,
+					       count);
+			xmit->tail =
+				(xmit->tail + count) & (UART_XMIT_SIZE - 1);
+			port->icount.tx += count;
+		}
+
+		if (uart_circ_empty(xmit))
+			break;
+	}
+
+	tty_flip_buffer_push(t_port);
+
+	up(&t_serial->sem);
 }
 
 static void tty0uart_uart_stop_rx(struct uart_port *port)
