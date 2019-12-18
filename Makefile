@@ -6,6 +6,11 @@ all:
 
 .PHONY: install
 install:
+	make -C module modules_install
+	sed -e ':a' -e 'N' -e '$$!ba' -e 's/\ntty0uart//g' -i /etc/modules
+	echo tty0uart | tee -a /etc/modules
+	depmod
+	modprobe tty0uart || sed -e ':a' -e 'N' -e '$$!ba' -e 's/\ntty0uart//g' -i /etc/modules
 
 .PHONY: clean
 clean:
@@ -16,6 +21,10 @@ distclean: clean
 
 .PHONY: uninstall
 uninstall:
+	modprobe -r tty0uart || \
+	sed -e ':a' -e 'N' -e '$$!ba' -e 's/\ntty0uart//g' -i /etc/modules
+	rm /lib/modules/$(shell uname -r)/*/tty0uart.ko
+	depmod
 
 .PHONY: clang
 clang: $(call rwildcard,,*.c) $(call rwildcard,,*.cpp) $(call rwildcard,,*.h) $(call rwildcard,,*.hpp)
