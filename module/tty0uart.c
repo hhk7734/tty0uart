@@ -215,8 +215,8 @@ static int tty0uart_tty_write(struct tty_struct *tty,
 	u_serial = &tty0uart_uart_serials[tty->index];
 
 	if ((!u_serial) || (!u_serial->is_open)) {
-		printk(KERN_ERR "/dev/ttyVS%d does not open.\n", tty->index);
-		return -ENODEV;
+		// printk(KERN_ERR "/dev/ttyVS%d does not open.\n", tty->index);
+		return count;
 	}
 
 	u_port = &u_serial->port;
@@ -715,7 +715,7 @@ static void tty0uart_uart_start_tx(struct uart_port *port)
 	size_t count;
 
 	if ((!t_serial) || (!t_serial->is_open)) {
-		printk(KERN_ERR "/dev/ttyvs%d does not open.\n", port->line);
+		// printk(KERN_ERR "/dev/ttyvs%d does not open.\n", port->line);
 		xmit->tail = xmit->head;
 		return;
 	}
@@ -810,9 +810,13 @@ static void tty0uart_uart_flush_buffer(struct uart_port *port)
 }
 
 static void tty0uart_uart_set_termios(struct uart_port *port,
-				      struct ktermios *new,
+				      struct ktermios *termios,
 				      struct ktermios *old)
 {
+	// unsigned int baud;
+	// // port, termios, old, min, max
+	// baud = uart_get_baud_rate(port, termios, old, 2400, 4000000);
+	// uart_update_timeout(port, termios->c_cflag, baud);
 }
 
 static void tty0uart_uart_set_ldisc(struct uart_port *port,
@@ -892,6 +896,7 @@ static void tty0uart_uart_init_port(struct tty0uart_uart_serial *serial,
 	port->line = pdev->id;
 	port->dev = &pdev->dev;
 	port->type = PORT_TTY0UART;
+	// port->uartclk = 4000000;
 }
 
 static int tty0uart_uart_serial_probe(struct platform_device *pdev)
