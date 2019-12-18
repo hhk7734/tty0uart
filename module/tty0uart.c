@@ -41,7 +41,7 @@
 #include <linux/platform_device.h>
 #include <linux/serial_core.h>
 
-#define DRIVER_VERSION "v0.1"
+#define DRIVER_VERSION "v1.0"
 #define DRIVER_AUTHOR "Hyeonki Hong <hhk7734@gmail.com>"
 #define DRIVER_DESC                                                            \
 	"tty0uart: Null-modem emulator connecting virtual tty to virtual UART"
