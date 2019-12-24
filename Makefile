@@ -24,10 +24,10 @@ distclean: clean
 
 .PHONY: uninstall
 uninstall:
-	modprobe -r tty0uart || \
-	sed -e ':a' -e 'N' -e '$$!ba' -e 's/\ntty0uart//g' -i /etc/modules
-	rm /lib/modules/$(shell uname -r)/*/tty0uart.ko
+	modprobe -r tty0uart || true
 	depmod
+	sed -e ':a' -e 'N' -e '$$!ba' -e 's/\ntty0uart//g' -i /etc/modules
+	rm -f /lib/modules/$(shell uname -r)/*/tty0uart.ko
 	rm -f /etc/udev/rules.d/51-tty0uart.rules
 
 .PHONY: clang
