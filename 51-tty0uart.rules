@@ -1,0 +1,3 @@
+# /dev/ttyvs /dev/ttyVS
+KERNEL=="ttyvs*", GROUP="dialout", MODE="0660"
+KERNEL=="ttyVS*", GROUP="dialout", MODE="0660"
