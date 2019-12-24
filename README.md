@@ -2,9 +2,9 @@
 
 **tty0uart**: Null-modem emulator connecting virtual tty to virtual UART
 
-/dev/ttyvs0 \<--\> /dev/ttyVS0
+/dev/ttyhk0 \<--\> /dev/ttyHK0
 
-Various programs can detect /dev/ttyVS0 but usually not /dev/ttyvs0.
+Various programs can detect /dev/ttyHK0 but usually not /dev/ttyhk0.
 
 ## Installation
 

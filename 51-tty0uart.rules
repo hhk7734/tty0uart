@@ -1,3 +1,3 @@
-# /dev/ttyvs /dev/ttyVS
-KERNEL=="ttyvs*", GROUP="dialout", MODE="0660"
-KERNEL=="ttyVS*", GROUP="dialout", MODE="0660"
+# /dev/ttyhk /dev/ttyHK
+KERNEL=="ttyhk*", GROUP="dialout", MODE="0660"
+KERNEL=="ttyHK*", GROUP="dialout", MODE="0660"

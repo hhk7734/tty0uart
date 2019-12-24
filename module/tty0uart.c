@@ -215,7 +215,7 @@ static int tty0uart_tty_write(struct tty_struct *tty,
 	u_serial = &tty0uart_uart_serials[tty->index];
 
 	if ((!u_serial) || (!u_serial->is_open)) {
-		// printk(KERN_ERR "/dev/ttyVS%d does not open.\n", tty->index);
+		// printk(KERN_ERR "/dev/ttyHK%d does not open.\n", tty->index);
 		return count;
 	}
 
@@ -563,7 +563,7 @@ static int tty0uart_tty_init(void)
 	/* initialize the tty driver */
 	tty0uart_tty_driver->owner = THIS_MODULE;
 	tty0uart_tty_driver->driver_name = "tty0uart_tty";
-	tty0uart_tty_driver->name = "ttyvs";
+	tty0uart_tty_driver->name = "ttyhk";
 	/* no more devfs subsystem */
 	tty0uart_tty_driver->major = TTY0UART_MAJOR;
 	tty0uart_tty_driver->minor_start = TTY0UART_MINOR;
@@ -631,7 +631,7 @@ static void tty0uart_tty_exit(void)
 static struct uart_driver tty0uart_uart_driver = {
 	.owner = THIS_MODULE,
 	.driver_name = "tty0uart_uart",
-	.dev_name = "ttyVS",
+	.dev_name = "ttyHK",
 	.major = TTY0UART_MAJOR,
 	.minor = TTY0UART_MINOR,
 };
@@ -715,7 +715,7 @@ static void tty0uart_uart_start_tx(struct uart_port *port)
 	size_t count;
 
 	if ((!t_serial) || (!t_serial->is_open)) {
-		// printk(KERN_ERR "/dev/ttyvs%d does not open.\n", port->line);
+		// printk(KERN_ERR "/dev/ttyhk%d does not open.\n", port->line);
 		xmit->tail = xmit->head;
 		return;
 	}
